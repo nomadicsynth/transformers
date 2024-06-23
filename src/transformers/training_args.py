@@ -775,6 +775,16 @@ class TrainingArguments:
 
         eval_on_start(`bool`, *optional*, defaults to `False`):
             Whether to perform a evaluation step (sanity check) before the training to ensure the validation steps works correctly.
+
+        grokfast_ema (`Optional[bool]`, defaults to `False`):
+            If set to `True`, enables Grokfast EMA filtering of gradients. From the paper [Grokfast: Accelerated Grokking by
+            Amplifying Slow Gradients](https://arxiv.org/abs/2403.03507). Totally experimental and may not work at all.
+
+        grokfast_ema_grad (`Optional[float]`, defaults to `0.98`):
+            The alpha value for the EMA filtering of gradients.
+
+        grokfast_ema_grad (`Optional[float]`, defaults to `2.0`):
+            The lambda value for the EMA filtering of gradients.
     """
 
     framework = "pt"
@@ -1463,6 +1473,23 @@ class TrainingArguments:
         metadata={
             "help": "Whether to run through the entire `evaluation` step at the very beginning of training as a sanity check."
         },
+    )
+
+    grokfast_ema: Optional[bool] = field(
+        default=False,
+        metadata={
+            "help": "Whether to enable Grokfast EMA slow-gradient amplification. This is totally experimental and may not work at all."
+        },
+    )
+
+    grokfast_ema_alpha: Optional[float] = field(
+        default=0.98,
+        metadata={"help": "The alpha value to use for Grokfast."},
+    )
+
+    grokfast_ema_lambda: Optional[float] = field(
+        default=2.0,
+        metadata={"help": "The lambda value to use for Grokfast."},
     )
 
     def __post_init__(self):

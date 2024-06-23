@@ -59,6 +59,7 @@ from .configuration_utils import PretrainedConfig
 from .data.data_collator import DataCollator, DataCollatorWithPadding, default_data_collator
 from .debug_utils import DebugOption, DebugUnderflowOverflow
 from .feature_extraction_sequence_utils import SequenceFeatureExtractor
+from .grokfast import gradfilter_ema
 from .hyperparameter_search import ALL_HYPERPARAMETER_SEARCH_BACKENDS, default_hp_search_backend
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
@@ -2227,6 +2228,7 @@ class Trainer:
                 rng_to_sync = True
 
             step = -1
+            grokfast_grads = None
             for step, inputs in enumerate(epoch_iterator):
                 total_batched_samples += 1
 
@@ -2297,6 +2299,15 @@ class Trainer:
                     # in accelerate. So, explicitly enable sync gradients to True in that case.
                     if is_last_step_and_steps_less_than_grad_acc:
                         self.accelerator.gradient_state._set_sync_gradients(True)
+
+                    # Apply Grokfast EMA slow-gradient amplification
+                    if args.grokfast_ema:
+                        grokfast_grads = gradfilter_ema(
+                            model,
+                            grads=grokfast_grads,
+                            alpha=args.grokfast_ema_alpha,
+                            lamb=args.grokfast_ema_lambda,
+                        )
 
                     # Gradient clipping
                     if args.max_grad_norm is not None and args.max_grad_norm > 0:
