@@ -778,12 +778,12 @@ class TrainingArguments:
 
         grokfast_ema (`Optional[bool]`, defaults to `False`):
             If set to `True`, enables Grokfast EMA filtering of gradients. From the paper [Grokfast: Accelerated Grokking by
-            Amplifying Slow Gradients](https://arxiv.org/abs/2403.03507). Totally experimental and may not work at all.
+            Amplifying Slow Gradients](https://arxiv.org/abs/2403.03507).
 
-        grokfast_ema_grad (`Optional[float]`, defaults to `0.98`):
+        grokfast_ema_alpha (`Optional[float]`, defaults to `0.98`):
             The alpha value for the EMA filtering of gradients.
 
-        grokfast_ema_grad (`Optional[float]`, defaults to `2.0`):
+        grokfast_ema_lambda (`Optional[float]`, defaults to `2.0`):
             The lambda value for the EMA filtering of gradients.
     """
 
@@ -1478,7 +1478,7 @@ class TrainingArguments:
     grokfast_ema: Optional[bool] = field(
         default=False,
         metadata={
-            "help": "Whether to enable Grokfast EMA slow-gradient amplification. This is totally experimental and may not work at all."
+            "help": "Whether to enable Grokfast EMA slow-gradient amplification. From the paper [Grokfast: Accelerated Grokking by Amplifying Slow Gradients](https://arxiv.org/abs/2403.03507)."
         },
     )
 
