@@ -2364,6 +2364,9 @@ class Trainer:
                     if is_torch_xla_available():
                         xm.mark_step()
                     break
+
+            del grokfast_grads
+            
             if step < 0:
                 logger.warning(
                     "There seems to be not a single sample in your epoch_iterator, stopping training at step"
