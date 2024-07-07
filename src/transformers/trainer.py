@@ -2365,8 +2365,6 @@ class Trainer:
                         xm.mark_step()
                     break
 
-            del grokfast_grads
-            
             if step < 0:
                 logger.warning(
                     "There seems to be not a single sample in your epoch_iterator, stopping training at step"
