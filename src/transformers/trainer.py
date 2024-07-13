@@ -34,6 +34,7 @@ import time
 import warnings
 from collections.abc import Mapping
 from pathlib import Path
+from sklearn.metrics import accuracy_score
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
 
 
@@ -704,6 +705,8 @@ class Trainer:
             # Tensor axis is just a placeholder where it will not be used in FSDPv2.
             num_devices = xr.global_runtime_device_count()
             xs.set_global_mesh(xs.Mesh(np.array(range(num_devices)), (num_devices, 1), axis_names=("fsdp", "tensor")))
+
+        self.accuracy_batch = []
 
     def _activate_neftune(self, model):
         r"""
@@ -3241,6 +3244,11 @@ class Trainer:
         if self.args.include_num_input_tokens_seen:
             logs["num_input_tokens_seen"] = self.state.num_input_tokens_seen
 
+        # TODO: Find the right place to log this. This seems hacky
+        if len(self.accuracy_batch) > 0 and "eval_accuracy" not in logs:
+            logs["accuracy"] = np.mean(self.accuracy_batch)
+            self.accuracy_batch = []
+
         output = {**logs, **{"step": self.state.global_step}}
         self.state.log_history.append(output)
         self.control = self.callback_handler.on_log(self.args, self.state, self.control, logs)
@@ -3363,23 +3371,53 @@ class Trainer:
 
         Subclass and override for custom behavior.
         """
+        def _is_causal_lm_model(model):
+            unwrapped_model = self.accelerator.unwrap_model(model)
+            if _is_peft_model(unwrapped_model):
+                model_name = unwrapped_model.base_model.model._get_name()
+            else:
+                model_name = unwrapped_model._get_name()
+            return model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values()
+
         if self.label_smoother is not None and "labels" in inputs:
             labels = inputs.pop("labels")
         else:
             labels = None
         outputs = model(**inputs)
+
+        # Compute accuracy
+        if "labels" in inputs and inputs["labels"] is not None:
+            logits = outputs["logits"]
+            attention_mask = inputs["attention_mask"]
+            metric_labels = inputs["labels"]
+
+            # If the model is causal, we need to shift the labels to the left
+            if _is_causal_lm_model(model):
+                metric_labels = metric_labels[..., 1:].contiguous().detach()
+                attention_mask = attention_mask[..., 1:].contiguous().detach()
+                # Shift logits to have the same shape
+                logits = logits[..., :-1, :].contiguous().detach()
+            else:
+                metric_labels = metric_labels.contiguous().detach()
+
+            predictions = torch.argmax(logits, dim=-1)
+
+            # Flatten the input
+            metric_labels = metric_labels.view(-1).cpu()
+            predictions = predictions.view(-1).cpu()
+            attention_mask = attention_mask.view(-1).cpu()
+
+            self.accuracy_batch.append(accuracy_score(
+                y_true=metric_labels, y_pred=predictions, sample_weight=attention_mask)
+            )
+
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
             self._past = outputs[self.args.past_index]
 
         if labels is not None:
-            unwrapped_model = self.accelerator.unwrap_model(model)
-            if _is_peft_model(unwrapped_model):
-                model_name = unwrapped_model.base_model.model._get_name()
-            else:
-                model_name = unwrapped_model._get_name()
-            if model_name in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES.values():
+            if _is_causal_lm_model(model):
                 loss = self.label_smoother(outputs, labels, shift_labels=True)
             else:
                 loss = self.label_smoother(outputs, labels)
@@ -3963,6 +4001,10 @@ class Trainer:
                 metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
         elif metrics is None:
             metrics = {}
+
+        if len(self.accuracy_batch) > 0:
+            metrics["accuracy"] = np.mean(self.accuracy_batch)
+            self.accuracy_batch = []
 
         # To be JSON-serializable, we need to remove numpy types or zero-d tensors
         metrics = denumpify_detensorize(metrics)
