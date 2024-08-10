@@ -3388,17 +3388,19 @@ class Trainer:
         # Compute accuracy
         if "labels" in inputs and inputs["labels"] is not None:
             logits = outputs["logits"]
-            attention_mask = inputs["attention_mask"]
             metric_labels = inputs["labels"]
+            attention_mask = inputs["attention_mask"]
 
             # If the model is causal, we need to shift the labels to the left
             if _is_causal_lm_model(model):
-                metric_labels = metric_labels[..., 1:].contiguous().detach()
-                attention_mask = attention_mask[..., 1:].contiguous().detach()
+                metric_labels = metric_labels[..., 1:]
+                attention_mask = attention_mask[..., 1:]
                 # Shift logits to have the same shape
-                logits = logits[..., :-1, :].contiguous().detach()
-            else:
-                metric_labels = metric_labels.contiguous().detach()
+                logits = logits[..., :-1, :]
+
+            logits = logits.contiguous().detach()
+            metric_labels = metric_labels.contiguous().detach()
+            attention_mask = attention_mask.contiguous().detach()
 
             predictions = torch.argmax(logits, dim=-1)
 
